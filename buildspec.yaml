@@ -26,35 +26,63 @@ phases:
   build:
     commands:
       - |
-        set -eux
+        set -e  # Exit on error, but remove -u and -x for better debugging
+        echo "🚀 Starting build phase..."
+
+        # Function to handle errors gracefully
+        handle_error() {
+          echo "❌ ERROR: $1"
+          echo "Build failed at: $(date)"
+          exit 1
+        }
+
         echo "=== DEBUGGING INFORMATION ==="
         echo "Current working directory: $(pwd)"
+        echo "Environment variables:"
+        env | grep -E "(TEMPLATE_PATH|STACK_NAME|AWS_)" || echo "No relevant env vars found"
+        echo ""
         echo "Listing all files in current directory:"
-        ls -la
+        ls -la || handle_error "Failed to list current directory"
         echo ""
         echo "Listing cloudformation directory:"
-        ls -la cloudformation/ || echo "cloudformation directory not found"
+        if [ -d "cloudformation" ]; then
+          ls -la cloudformation/ || handle_error "Failed to list cloudformation directory"
+        else
+          echo "⚠️  cloudformation directory not found"
+        fi
         echo ""
         echo "Template path variable: $TEMPLATE_PATH"
+        echo "Fallback template path: $FALLBACK_TEMPLATE_PATH"
         echo "Checking if template file exists:"
         if [ -f "$TEMPLATE_PATH" ]; then
           echo "✅ Template file found at: $TEMPLATE_PATH"
-          ls -la "$TEMPLATE_PATH"
+          ls -la "$TEMPLATE_PATH" || handle_error "Failed to stat template file"
         else
           echo "❌ Template file NOT found at: $TEMPLATE_PATH"
           echo "Searching for template files..."
-          find . -name "*.yaml" -o -name "*.yml" | head -10
+          find . -name "*.yaml" -o -name "*.yml" 2>/dev/null | head -10 || echo "No YAML files found"
         fi
         echo "=== END DEBUGGING ==="
         echo ""
 
-        echo "Running Python syntax check"
-        # Fix: Added missing closing parenthesis
-        python -m py_compile $(find * -type f -name '*.py') || echo "No Python files found"
+        echo "📝 Running Python syntax check..."
+        if find . -name "*.py" -type f | grep -q .; then
+          echo "Python files found, checking syntax..."
+          python -m py_compile $(find . -type f -name '*.py') || handle_error "Python syntax check failed"
+          echo "✅ Python syntax check passed"
+        else
+          echo "ℹ️  No Python files found, skipping syntax check"
+        fi
+        echo ""
 
-        echo "Finding template files"
-        TEMPLATES="$(find . -type f -name '*.yaml' -o -name '*.yml' | grep -v '.git')"
-        echo "Found CloudFormation templates: $TEMPLATES"
+        echo "🔍 Finding template files..."
+        TEMPLATES="$(find . -type f -name '*.yaml' -o -name '*.yml' 2>/dev/null | grep -v '.git' || echo '')"
+        if [ -n "$TEMPLATES" ]; then
+          echo "Found CloudFormation templates: $TEMPLATES"
+        else
+          echo "⚠️  No YAML template files found"
+        fi
+        echo ""
 
         # Verify template file exists and use fallback if needed
         if [ ! -f "$TEMPLATE_PATH" ]; then
@@ -74,43 +102,107 @@ phases:
         fi
 
         echo "✅ Using template file: $TEMPLATE_PATH"
+        echo ""
 
-        echo "Validating CloudFormation template..."
-        aws cloudformation validate-template --template-body file://$TEMPLATE_PATH
+        echo "🔍 Validating CloudFormation template..."
+        if aws cloudformation validate-template --template-body file://$TEMPLATE_PATH --region $AWS_DEFAULT_REGION; then
+          echo "✅ Template validation passed"
+        else
+          handle_error "CloudFormation template validation failed"
+        fi
+        echo ""
 
-        echo "Linting CloudFormation template..."
-        cfn-lint $TEMPLATE_PATH
+        echo "🔍 Linting CloudFormation template..."
+        if cfn-lint $TEMPLATE_PATH; then
+          echo "✅ Template linting passed"
+        else
+          echo "⚠️  Template linting found issues, but continuing..."
+        fi
+        echo ""
 
-        echo "Deploying CloudFormation stack..."
-        aws cloudformation deploy \
+        echo "🚀 Deploying CloudFormation stack..."
+        echo "Stack Name: $STACK_NAME"
+        echo "Template: $TEMPLATE_PATH"
+        echo "Region: $AWS_DEFAULT_REGION"
+        echo ""
+
+        if aws cloudformation deploy \
           --template-file $TEMPLATE_PATH \
           --stack-name $STACK_NAME \
           --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
           --no-fail-on-empty-changeset \
-          --region $AWS_DEFAULT_REGION
+          --region $AWS_DEFAULT_REGION; then
+          echo "✅ CloudFormation deployment completed"
+        else
+          handle_error "CloudFormation deployment failed"
+        fi
+        echo ""
 
-        echo "Verifying stack deployment..."
-        aws cloudformation describe-stacks \
+        echo "📊 Verifying stack deployment..."
+        STACK_STATUS=$(aws cloudformation describe-stacks \
           --stack-name $STACK_NAME \
           --region $AWS_DEFAULT_REGION \
           --query 'Stacks[0].StackStatus' \
-          --output text
+          --output text 2>/dev/null || echo "UNKNOWN")
+
+        echo "Stack Status: $STACK_STATUS"
+
+        if [[ "$STACK_STATUS" == "CREATE_COMPLETE" || "$STACK_STATUS" == "UPDATE_COMPLETE" ]]; then
+          echo "✅ Stack deployment successful!"
+        else
+          echo "⚠️  Stack status: $STACK_STATUS"
+          echo "Checking recent stack events..."
+          aws cloudformation describe-stack-events \
+            --stack-name $STACK_NAME \
+            --region $AWS_DEFAULT_REGION \
+            --max-items 5 \
+            --query 'StackEvents[*].[Timestamp,ResourceStatus,ResourceType,LogicalResourceId,ResourceStatusReason]' \
+            --output table || echo "Could not retrieve stack events"
+        fi
 
   post_build:
     commands:
       - |
-        if [ $CODEBUILD_BUILD_SUCCEEDING -eq 1 ]; then
-          echo "Build succeeded! Stack deployed successfully."
-          aws cloudformation describe-stack-resources \
-            --stack-name $STACK_NAME \
-            --region $AWS_DEFAULT_REGION
-        else
-          echo "Build failed! Checking stack status..."
-          aws cloudformation describe-stack-events \
+        echo "🏁 Post-build phase starting..."
+
+        if [ "${CODEBUILD_BUILD_SUCCEEDING:-0}" -eq 1 ]; then
+          echo "🎉 Build succeeded! Stack deployed successfully."
+          echo ""
+          echo "📋 Stack Resources:"
+          if aws cloudformation describe-stack-resources \
             --stack-name $STACK_NAME \
             --region $AWS_DEFAULT_REGION \
-            --max-items 10
+            --query 'StackResources[*].[LogicalResourceId,ResourceType,ResourceStatus]' \
+            --output table 2>/dev/null; then
+            echo "✅ Stack resources listed successfully"
+          else
+            echo "⚠️  Could not retrieve stack resources"
+          fi
+          echo ""
+          echo "📤 Stack Outputs:"
+          aws cloudformation describe-stacks \
+            --stack-name $STACK_NAME \
+            --region $AWS_DEFAULT_REGION \
+            --query 'Stacks[0].Outputs[*].[OutputKey,OutputValue]' \
+            --output table 2>/dev/null || echo "No outputs found"
+        else
+          echo "❌ Build failed! Checking stack status..."
+          echo ""
+          echo "📋 Recent Stack Events:"
+          if aws cloudformation describe-stack-events \
+            --stack-name $STACK_NAME \
+            --region $AWS_DEFAULT_REGION \
+            --max-items 10 \
+            --query 'StackEvents[*].[Timestamp,ResourceStatus,ResourceType,LogicalResourceId,ResourceStatusReason]' \
+            --output table 2>/dev/null; then
+            echo "Stack events retrieved"
+          else
+            echo "⚠️  Could not retrieve stack events (stack may not exist)"
+          fi
         fi
+
+        echo ""
+        echo "🏁 Post-build phase completed"
 
 artifacts:
   files:

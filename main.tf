@@ -22,12 +22,23 @@ resource "aws_iam_role_policy" "codebuild_attach" {
     policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["codebuild:*"]
-      Resource = "*"
-    }]
+        Sid      = "CodeBuildAccess"
+        Effect   = "Allow"
+        Action   = ["codebuild:*"]
+        Resource = "*"
+    },
+    {
+        Sid      = "CloudWatchAccess"
+        Effect   = "Allow"
+        Action   = [
+            "logs:CreateLogGroup",
+            "logs:CreateLogStream",
+            "logs:PutLogEvents"
+        ]
+        Resource = "*"
+    }
+    ]
   })
-
 }
 
 resource "aws_codebuild_project" "project" {

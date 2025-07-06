@@ -35,12 +35,12 @@ resource "aws_codebuild_project" "project" {
     description = "This is my auto codebuild project"
     service_role = aws_iam_role.codebuild_role.arn
 
-    Source {
+    source {
         type = "GITHUB"
         location = var.github_repo_url
     }
 
-    evnironment {
+    environment {
         compute_type = "BUILD_GENERAL1_SMALL"
         image = "aws/codebuild/standard:7.0"
         type = "LINUX_CONTAINER"

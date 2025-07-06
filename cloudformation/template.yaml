@@ -5,7 +5,7 @@ Resources:
   MyIAMRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: c
+      RoleName: SampleS3ReadOnlyRole
       Description: IAM role with S3 read-only access
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -24,3 +24,16 @@ Resources:
           Value: SampleRole
         - Key: Purpose
           Value: Demo
+
+Outputs:
+  IAMRoleArn:
+    Description: ARN of the created IAM role
+    Value: !GetAtt MyIAMRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-IAMRoleArn"
+
+  IAMRoleName:
+    Description: Name of the created IAM role
+    Value: !Ref MyIAMRole
+    Export:
+      Name: !Sub "${AWS::StackName}-IAMRoleName"

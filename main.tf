@@ -19,7 +19,15 @@ resource "aws_iam_role" "codebuild_role" {
 
 resource "aws_iam_role_policy" "codebuild_attach" {
     role = aws_iam_role.codebuild_role.name
-    policy_arn = "arn:aws:iam::aws:policy/AWSCodeBuildDeveloperAccess"
+    policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["codebuild:*"]
+      Resource = "*"
+    }]
+  })
+
 }
 
 resource "aws_codebuild_project" "project" {

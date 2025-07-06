@@ -6,6 +6,7 @@ phases:
       python: 3.11
     commands:
       - echo Installing AWS CLI...
+      
       - pip install --upgrade awscli
 
   pre_build:
@@ -15,6 +16,9 @@ phases:
 
   build:
     commands:
+      - echo "verifying aws cli version..."
+      - aws --version
+      - which aws
       - echo "verfiying template.yaml..."
       - aws cloudformation validate-template --template-body file://template.yaml
       - echo Deploying CloudFormation stack...

@@ -36,6 +36,14 @@ resource "aws_iam_role_policy" "codebuild_attach" {
             "logs:PutLogEvents"
         ]
         Resource = "*"
+    },
+    {
+        Sid      = "CloudFormationAccess"
+        "Effect": "Allow",
+        "Action": [
+        "cloudformation:ValidateTemplate"
+        ],
+        "Resource": "*"
     }
     ]
   })

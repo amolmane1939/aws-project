@@ -4,6 +4,7 @@ env:
   variables:
     STACK_NAME: "my-iam-role-stack"
     TEMPLATE_PATH: "cloudformation/template.yaml"
+    FALLBACK_TEMPLATE_PATH: "template.yaml"
     AWS_DEFAULT_REGION: "ap-south-1"
 
 phases:
@@ -26,13 +27,53 @@ phases:
     commands:
       - |
         set -eux
+        echo "=== DEBUGGING INFORMATION ==="
+        echo "Current working directory: $(pwd)"
+        echo "Listing all files in current directory:"
+        ls -la
+        echo ""
+        echo "Listing cloudformation directory:"
+        ls -la cloudformation/ || echo "cloudformation directory not found"
+        echo ""
+        echo "Template path variable: $TEMPLATE_PATH"
+        echo "Checking if template file exists:"
+        if [ -f "$TEMPLATE_PATH" ]; then
+          echo "✅ Template file found at: $TEMPLATE_PATH"
+          ls -la "$TEMPLATE_PATH"
+        else
+          echo "❌ Template file NOT found at: $TEMPLATE_PATH"
+          echo "Searching for template files..."
+          find . -name "*.yaml" -o -name "*.yml" | head -10
+        fi
+        echo "=== END DEBUGGING ==="
+        echo ""
+
         echo "Running Python syntax check"
         # Fix: Added missing closing parenthesis
         python -m py_compile $(find * -type f -name '*.py') || echo "No Python files found"
 
         echo "Finding template files"
-        TEMPLATES="$(find ./cloudformation -type f -name '*.yaml' -o -name '*.yml')"
+        TEMPLATES="$(find . -type f -name '*.yaml' -o -name '*.yml' | grep -v '.git')"
         echo "Found CloudFormation templates: $TEMPLATES"
+
+        # Verify template file exists and use fallback if needed
+        if [ ! -f "$TEMPLATE_PATH" ]; then
+          echo "⚠️  Primary template not found at $TEMPLATE_PATH"
+          echo "Trying fallback template at $FALLBACK_TEMPLATE_PATH"
+          if [ -f "$FALLBACK_TEMPLATE_PATH" ]; then
+            echo "✅ Using fallback template: $FALLBACK_TEMPLATE_PATH"
+            TEMPLATE_PATH="$FALLBACK_TEMPLATE_PATH"
+          else
+            echo "❌ ERROR: No template file found at either location"
+            echo "Primary: $TEMPLATE_PATH"
+            echo "Fallback: $FALLBACK_TEMPLATE_PATH"
+            echo "Available YAML files:"
+            find . -name "*.yaml" -o -name "*.yml" | grep -v '.git'
+            exit 1
+          fi
+        fi
+
+        echo "✅ Using template file: $TEMPLATE_PATH"
 
         echo "Validating CloudFormation template..."
         aws cloudformation validate-template --template-body file://$TEMPLATE_PATH

@@ -1,0 +1,26 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Sample IAM Role with S3 ReadOnly Access
+
+Resources:
+  MyIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: c
+      Description: IAM role with S3 read-only access
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      Path: /
+      Tags:
+        - Key: Name
+          Value: SampleRole
+        - Key: Purpose
+          Value: Demo

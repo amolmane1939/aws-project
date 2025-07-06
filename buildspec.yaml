@@ -3,31 +3,32 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      python: 3.11
-    commands:
-      - echo Installing AWS CLI...
-      - pip install --upgrade awscli
+      python: 3.11      
 
   pre_build:
     commands:
+      - env
       - echo Logging in to AWS...
+      - aws --version
       - aws sts get-caller-identity
+      - pip install --quiet --upgrade pip
+      - pip install --upgrade awscli
+      - pip install --quiet --upgrade cfn-lint
+      - cfn-lint --version
 
   build:
     commands:
-      - echo "verifying aws cli version..."
-      - aws --version
-      - which aws
-      - echo "verfiying template.yaml..."
-      - aws cloudformation validate-template --template-body file://template.yaml
-      - echo Deploying CloudFormation stack...
-      - aws cloudformation deploy \
-          --template-file template.yaml \
-          --stack-name create-iam-user \
-          --capabilities CAPABILITY_NAMED_IAM \
-          --parameter-overrides \
-              EnvName=dev \
-              RoleName=sample-iam-role 
+      - |
+        set -eux
+        echo "Running Python syntax check"
+        python -m py_compile $(find * -type f -name '*.py'
+        echo "find template file"
+        TEMPLATES="$(find ./cloudformation -type f)"
+        echo "Found CloudFormation templates: $TEMPLATES"
+        
+        echo "verfiying template.yaml..."
+        aws cloudformation validate-template --template-body file://template.yaml
+        
 
 artifacts:
   files:

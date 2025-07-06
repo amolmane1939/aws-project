@@ -1,0 +1,47 @@
+
+resource "aws_iam_role" "codebuild_role" {
+    name = "codebuild-service-role"
+    
+    assume_role_policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+            {
+                Action = "sts:AssumeRole"
+                Effect = "Allow"
+                Sid    = ""
+                Principal = {
+                    Service = "codebuild.amazonaws.com"
+                }
+            },
+        ]
+    })
+}
+
+resource "aws_iam_role_policy" "codebuild_attach" {
+    role = aws_iam_role.codebuild_role.name
+    policy_arn = "arn:aws:iam::aws:policy/AWSCodeBuildDeveloperAccess"
+}
+
+resource "aws_codebuild_project" "project" {
+    name = "MyAutoCodeBuildProject"
+    description = "This is my auto codebuild project"
+
+    Source {
+        type = "GITHUB"
+        location = var.github_repo_url
+        buildspec = "buildspec.yml"
+    }
+
+    evnironment {
+        compute_type = "BUILD_GENERAL1_SMALL"
+        image = "aws/codebuild/standard:7.0"
+        type = "LINUX_CONTAINER"
+        privileged_mode = false
+    }
+
+    service_role = aws_iam_role.codebuild_role.arn
+
+    trigger {
+        webhook = true
+    }
+}

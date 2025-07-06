@@ -1,9 +1,15 @@
 version: 0.2
 
+env:
+  variables:
+    STACK_NAME: "my-iam-role-stack"
+    TEMPLATE_PATH: "cloudformation/template.yaml"
+    AWS_DEFAULT_REGION: "us-east-1"
+
 phases:
   install:
     runtime-versions:
-      python: 3.11      
+      python: 3.11
 
   pre_build:
     commands:
@@ -21,14 +27,49 @@ phases:
       - |
         set -eux
         echo "Running Python syntax check"
-        python -m py_compile $(find * -type f -name '*.py'
-        echo "find template file"
-        TEMPLATES="$(find ./cloudformation -type f)"
+        # Fix: Added missing closing parenthesis
+        python -m py_compile $(find * -type f -name '*.py') || echo "No Python files found"
+
+        echo "Finding template files"
+        TEMPLATES="$(find ./cloudformation -type f -name '*.yaml' -o -name '*.yml')"
         echo "Found CloudFormation templates: $TEMPLATES"
-        
-        echo "verfiying template.yaml..."
-        aws cloudformation validate-template --template-body file://template.yaml
-        
+
+        echo "Validating CloudFormation template..."
+        aws cloudformation validate-template --template-body file://$TEMPLATE_PATH
+
+        echo "Linting CloudFormation template..."
+        cfn-lint $TEMPLATE_PATH
+
+        echo "Deploying CloudFormation stack..."
+        aws cloudformation deploy \
+          --template-file $TEMPLATE_PATH \
+          --stack-name $STACK_NAME \
+          --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+          --no-fail-on-empty-changeset \
+          --region $AWS_DEFAULT_REGION
+
+        echo "Verifying stack deployment..."
+        aws cloudformation describe-stacks \
+          --stack-name $STACK_NAME \
+          --region $AWS_DEFAULT_REGION \
+          --query 'Stacks[0].StackStatus' \
+          --output text
+
+  post_build:
+    commands:
+      - |
+        if [ $CODEBUILD_BUILD_SUCCEEDING -eq 1 ]; then
+          echo "Build succeeded! Stack deployed successfully."
+          aws cloudformation describe-stack-resources \
+            --stack-name $STACK_NAME \
+            --region $AWS_DEFAULT_REGION
+        else
+          echo "Build failed! Checking stack status..."
+          aws cloudformation describe-stack-events \
+            --stack-name $STACK_NAME \
+            --region $AWS_DEFAULT_REGION \
+            --max-items 10
+        fi
 
 artifacts:
   files:

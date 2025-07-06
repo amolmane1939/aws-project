@@ -7,4 +7,5 @@ variable "aws_region" {
 variable "github_repo_url" {
     description = "The URL of the GitHub repository to clone"
     type        = string
+    default     = "https://github.com/amolmane1939/aws-project.git"
 }

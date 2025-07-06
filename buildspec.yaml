@@ -4,7 +4,7 @@ env:
   variables:
     STACK_NAME: "my-iam-role-stack"
     TEMPLATE_PATH: "cloudformation/template.yaml"
-    AWS_DEFAULT_REGION: "us-east-1"
+    AWS_DEFAULT_REGION: "ap-south-1"
 
 phases:
   install:

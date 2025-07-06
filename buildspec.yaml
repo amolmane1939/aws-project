@@ -5,17 +5,8 @@ phases:
     runtime-versions:
       python: 3.11
     commands:
-      - pip install --upgrade pip
-      - echo "Installing AWS CLI v2..."
-      - if ! command -v aws &> /dev/null; then
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip -q awscliv2.zip
-          sudo ./aws/install --update
-        else
-          echo "AWS CLI v2 is already installed."
-        fi
+      - echo Installing AWS CLI...
       - pip install --upgrade awscli
-
 
   pre_build:
     commands:
